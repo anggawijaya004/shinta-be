@@ -4,14 +4,69 @@ const { filter } = require("../helpers/pagination");
 const db = require("../models");
 const Op = db.Sequelize.Op;
 const fs = require("fs");
+const path = require("path");
+const base = __dirname;
 const { comparePassword } = require("../helpers/bcrypt");
+const { server } = require("../utils/server");
+const readXlsxFile = require("read-excel-file/node");
+const { ExcelImportCreate } = require("../utils/import");
+
+const importData = async (req, res, next) => {
+  try {
+    if (req.file === undefined) {
+      return res.status(400).send("Silahkan upload file format excel");
+    }
+    let dir = path.join(base, "../");
+
+    let file = dir + "/public/file/excel/" + req.file.filename;
+
+    readXlsxFile(file).then((rows) => {
+      const { users } = ExcelImportCreate(rows);
+      User.bulkCreate(users, {
+        updateOnDuplicate: [
+          "name",
+          "noKK",
+          "npm",
+          "tempatLahir",
+          "tglLahir",
+          "jenisKelamin",
+          "phone",
+          "prov",
+          "kab",
+          "kec",
+          "kel",
+          "rw",
+          "rt",
+          "alamat",
+          "statusPerkawinan",
+          "statusDisabilitas",
+          "username",
+          "password",
+        ],
+      })
+        .then(() => {
+          res.status(200).send({
+            message: "Uploaded the file successfully: " + req.file.originalname,
+          });
+        })
+        .catch((error) => {
+          res.status(500).send({
+            message: "Fail to import data into database!",
+            error: error.message,
+          });
+        });
+    });
+  } catch (error) {
+    responseError(res, error);
+  }
+};
 
 const getUsers = async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 0;
     const limit = parseInt(req.query.limit) || 10;
     const offset = limit * page;
-    let { name, noKk, npm, prov, kab, kec, kel, rw, rt } = req.query;
+    let { name, noKK, npm, prov, kab, kec, kel, rw, rt } = req.query;
 
     let filterValue = {
       prov,
@@ -20,24 +75,15 @@ const getUsers = async (req, res) => {
       kel,
       rw,
       rt,
+      noKK: noKK ? { [Op.like]: "%" + noKK + "%" } : null,
+      npm: npm ? { [Op.like]: "%" + npm + "%" } : null,
+      name: name ? { [Op.like]: "%" + name + "%" } : null,
     };
     let filtered = filter(filterValue);
-    let searchV =
-      noKk || npm || name
-        ? {
-            [Op.or]: [
-              { noKk: { [Op.like]: "%" + noKk + "%" } },
-              { npm: { [Op.like]: "%" + npm + "%" } },
-              { name: { [Op.like]: "%" + name + "%" } },
-            ],
-          }
-        : null;
-
     //hitung jumlah rows
     const totalRows = await User.count({
       where: {
         ...filtered,
-        ...searchV,
       },
     });
     //hitung jumlah page
@@ -46,7 +92,6 @@ const getUsers = async (req, res) => {
     const result = await User.findAll({
       where: {
         ...filtered,
-        ...searchV,
       },
       offset: offset,
       limit: limit,
@@ -54,14 +99,22 @@ const getUsers = async (req, res) => {
       attributes: [
         "id",
         "name",
-        "noKk",
+        "noKK",
         "npm",
+        "tempatLahir",
+        "tglLahir",
+        "jenisKelamin",
+        "phone",
         "prov",
         "kab",
         "kec",
-        "kec",
+        "kel",
         "rw",
         "rt",
+        "alamat",
+        "statusPerkawinan",
+        "statusDisabilitas",
+        "username",
       ],
     });
     const data = {
@@ -105,7 +158,7 @@ const getUser = async (req, res) => {
       include: [
         {
           model: Appoinment,
-          attributes: ["date"],
+          attributes: ["id", "date"],
           include: [
             { model: Layanan, attributes: ["name"] },
             { model: Admin, attributes: ["name"] },
@@ -405,6 +458,54 @@ const updateUser = async (req, res, next) => {
   }
 };
 
+const updatePhoto = async (req, res, next) => {
+  const { id } = req.logedUser;
+
+  try {
+    const dataFind = await User.findOne({
+      where: { id },
+    });
+    let photo = dataFind.photo;
+    if (req.file) {
+      const { filename: image } = req.file;
+      photo = server + "/public/image/resize/" + req.file.filename;
+      await sharp(req.file.path)
+        .resize(700)
+        .jpeg()
+        .toFile(path.resolve(req.file.destination, "resize", image));
+    }
+    const data = await User.update(
+      {
+        photo,
+      },
+      {
+        where: { id },
+      }
+    );
+    if (data) {
+      // if (
+      //   req.file &&
+      //   fs.existsSync(
+      //     `./public/image/relawan/resize/${dataFind.fotoKTP
+      //       .split(`${server}/public/image/relawan/resize`)
+      //       .join("")}`
+      //   )
+      // ) {
+      //   fs.unlinkSync(
+      //     `./public/image/relawan/resize/${dataFind.fotoKTP
+      //       .split(`${server}/public/image/relawan/resize`)
+      //       .join("")}`
+      //   );
+      // }
+      responseSuccess(res, {
+        msg: "Foto profile berhasil diupdate",
+      });
+    }
+  } catch (err) {
+    return responseError(res, err);
+  }
+};
+
 const updateStatusUser = async (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
@@ -454,4 +555,6 @@ module.exports = {
   updateUserPassword,
   updateStatusUser,
   updateUserPasswordbyUser,
+  updatePhoto,
+  importData,
 };

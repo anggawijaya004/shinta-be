@@ -1,2 +1,2 @@
-const server = "https://tes-api-fay.selasartech.com";
+const server = "https://api-shinta.runbyindonesia.com";
 module.exports = { server };

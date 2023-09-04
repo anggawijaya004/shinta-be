@@ -1,4 +1,4 @@
-const { Admin } = require("../models");
+const { Admin, Layanan } = require("../models");
 const { responseSuccess, responseError } = require("../utils/response");
 const { filter } = require("../helpers/pagination");
 const db = require("../models");
@@ -8,7 +8,7 @@ const getAdmins = async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 0;
     const limit = parseInt(req.query.limit) || 10;
-    const name= req.query.name || "";
+    const name = req.query.cari || "";
     const offset = limit * page;
     let { idLayanan, role } = req.query;
 
@@ -19,6 +19,9 @@ const getAdmins = async (req, res) => {
           [Op.or]: [
             {
               name: {
+                [Op.like]: "%" + name + "%",
+              },
+              username: {
                 [Op.like]: "%" + name + "%",
               },
             },
@@ -40,9 +43,11 @@ const getAdmins = async (req, res) => {
         ...filtered,
         ...searchV,
       },
+      include: [{ model: Layanan, attributes: ["name"] }],
       offset: offset,
       limit: limit,
       order: [["id", "DESC"]],
+      attributes: ["id", "username", "name", "phone", "idLayanan"],
     });
     const data = {
       result: result,
@@ -57,11 +62,27 @@ const getAdmins = async (req, res) => {
   }
 };
 
+const getOptAdmins = async (req, res) => {
+  try {
+    const data = await Admin.findAll({
+      include: [{ model: Layanan, attributes: ["name", "id"] }],
+
+      order: [["id", "DESC"]],
+      attributes: ["id", "name", "idLayanan"],
+    });
+
+    responseSuccess(res, data);
+  } catch (err) {
+    responseError(res, err);
+  }
+};
+
 const getAdmin = async (req, res) => {
   try {
     const { id } = req.params;
     const data = await Admin.findOne({
       where: { id },
+      attributes: ["id", "username", "name", "phone", "idLayanan"],
     });
     if (!data) {
       const err = {
@@ -204,4 +225,5 @@ module.exports = {
   destroyAdmin,
   updateAdminPassword,
   updateAdmin,
+  getOptAdmins,
 };

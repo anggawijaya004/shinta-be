@@ -1,11 +1,57 @@
+const { Op } = require("sequelize");
+const { filter } = require("../helpers/pagination");
 const { Layanan } = require("../models");
 const { responseError, responseSuccess } = require("../utils/response");
 
 const getLayanans = async (req, res) => {
   try {
-    const data = await Layanan.findAll({
+    const page = parseInt(req.query.page) || 0;
+    const limit = parseInt(req.query.limit) || 10;
+    const offset = limit * page;
+    let { cari } = req.query;
+
+    let searchV = cari
+      ? {
+          [Op.or]: [{ name: { [Op.like]: "%" + cari + "%" } }],
+        }
+      : null;
+
+    //hitung jumlah rows
+    const totalRows = await Layanan.count({
+      where: {
+        ...searchV,
+      },
+    });
+    //hitung jumlah page
+    const totalPage = Math.ceil(totalRows / limit);
+    //ambil data user
+    const result = await Layanan.findAll({
+      where: {
+        ...searchV,
+      },
+      offset: offset,
+      limit: limit,
       order: [["id", "DESC"]],
       attributes: ["id", "name"],
+    });
+    const data = {
+      result: result,
+      page: page,
+      limit: limit,
+      totalRows: totalRows,
+      totalPage: totalPage,
+    };
+    responseSuccess(res, data);
+  } catch (err) {
+    responseError(res, err);
+  }
+};
+
+const getOptLayanans = async (req, res) => {
+  try {
+    const data = await Layanan.findAll({
+      order: [["id", "DESC"]],
+      attributes: ["id", ["name", "label"]],
     });
     responseSuccess(res, data);
   } catch (err) {
@@ -88,4 +134,5 @@ module.exports = {
   createLayanan,
   updateLayanan,
   destroyLayanan,
+  getOptLayanans,
 };
